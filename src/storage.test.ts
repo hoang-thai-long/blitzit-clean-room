@@ -1,0 +1,11 @@
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { load, save, STORAGE_KEY } from './storage';
+import { seed, timerAction } from './model';
+let entries: Map<string, string>;
+beforeEach(() => { entries = new Map(); vi.stubGlobal('localStorage', { getItem: (key: string) => entries.get(key) ?? null, setItem: (key: string, value: string) => entries.set(key, value) }); });
+afterEach(() => vi.unstubAllGlobals());
+it('first load seeds; save and reload preserves tasks, preferences, sessions', () => { const state = load().state; state.tasks[0].notes = 'Saved'; state.prefs.brand = 'Cosmic Indigo'; save(state); expect(load().state).toEqual(state); });
+it('persisted running session recovers paused', () => { const s = seed(); save(timerAction(s, { type: 'launch', taskId: s.tasks[0].id }, 100_000)); expect(load().state.timer.status).toBe('paused'); });
+it('invalid JSON is retained with visible error and memory-only sample', () => { entries.set(STORAGE_KEY, '{broken'); expect(load().error).toContain('Không thể đọc'); expect(entries.get(STORAGE_KEY)).toBe('{broken'); });
+it('malformed task or timer is rejected, without overwriting original', () => { const s = seed(); s.timer.elapsed = -1; const raw = JSON.stringify(s); entries.set(STORAGE_KEY, raw); expect(load().error).not.toBeNull(); expect(entries.get(STORAGE_KEY)).toBe(raw); });
+it('write failure propagates for the UI to show error', () => { vi.stubGlobal('localStorage', { setItem: () => { throw new Error('quota'); } }); expect(() => save(seed())).toThrow('quota'); });

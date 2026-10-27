@@ -1,0 +1,14 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+*.log
+*.tsbuildinfo
+desktop-dist/
+release/
+build/icon.png
+.env
+.desktop-test/
+desktop-test-results/
+api-dist/
+benchmark-results/

@@ -1,0 +1,13 @@
+node_modules
+dist
+desktop-dist
+api-dist
+release
+build
+.env
+.env.*
+*.log
+test-results
+desktop-test-results
+playwright-report
+.git
