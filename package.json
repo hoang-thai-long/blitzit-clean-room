@@ -1,7 +1,7 @@
 {
   "name": "local-focus-workspace",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Daylight — local-first focus workspace for Linux",
   "author": { "name": "Daylight", "email": "daylight@localhost.invalid" },
   "main": "desktop-dist/main.cjs",

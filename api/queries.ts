@@ -7,7 +7,7 @@ import { Database } from './database';
 import { invalid, notFound } from './errors';
 import { dayAt, validateRange, type Filters } from './reports';
 
-type Page = { limit?:string;offset?:string;cursor?:string };
+type Page = { limit?:string;offset?:string;cursor?:string;totals?:string };
 export async function sessionWhere(client:PoolClient,id:string,filters:Filters,timeZone:string) {
   validateRange(filters);
   const args:unknown[]=[id]; const parts=['s.workspace_id=$1'];
@@ -46,7 +46,7 @@ export class Queries {
   async sessions(id:string,q:Page & Filters) {
     return this.database.readTransaction(id,async(client,workspace)=>{
       const {sql,args}=await sessionWhere(client,id,q,this.timeZone);
-      const summary=(await client.query(`SELECT count(*) AS count,COALESCE(sum(end_ms-start_ms),0) AS duration FROM daylight_sessions s WHERE ${sql}`,args)).rows[0];
+      const summary=q.totals==='false'?null:(await client.query(`SELECT count(*) AS count,COALESCE(sum(end_ms-start_ms),0) AS duration FROM daylight_sessions s WHERE ${sql}`,args)).rows[0];
       const limit=Number(q.limit??50),offset=Number(q.offset??0);
       const fingerprint=createHash('sha256').update(JSON.stringify([id,q.start??null,q.end??null,q.listId??null,q.kind??null,this.timeZone])).digest('hex');
       let seek='';
@@ -60,7 +60,7 @@ export class Queries {
       const rows=await client.query(`SELECT s.* FROM daylight_sessions s WHERE ${sql}${seek} ORDER BY s.start_ms DESC,s.id DESC LIMIT $${args.length+1} OFFSET $${args.length+2}`,[...args,limit+1,offset]);
       const hasMore=rows.rows.length>limit,items=rows.rows.slice(0,limit).map(toSession),last=items.at(-1);
       const nextCursor=hasMore&&last?Buffer.from(JSON.stringify({start:last.start,id:last.id,filter:fingerprint})).toString('base64url'):null;
-      return {workspace,data:{items,total:Number(summary.count),totalDurationMs:Number(summary.duration),limit,offset,nextOffset:!q.cursor&&hasMore?offset+limit:null,nextCursor,timeZone:this.timeZone}};
+      return {workspace,data:{items,total:summary?Number(summary.count):null,totalDurationMs:summary?Number(summary.duration):null,limit,offset,nextOffset:!q.cursor&&hasMore?offset+limit:null,nextCursor,timeZone:this.timeZone}};
     });
   }
   async csv(id:string,filters:Filters) {

@@ -4,6 +4,8 @@
 
 > **Bổ sung REST API:** xem [API.md](API.md) cho Fastify/TypeScript, endpoints CRUD, Swagger, PostgreSQL config và Docker service. API là thiết kế mới, dùng chung bảng workspace và cơ chế writer lock với desktop; không đổi transport của UI trong đợt này.
 
+> **Schema chuẩn hóa v2 / bản desktop 1.1.0:** xem [DATABASE.md](DATABASE.md) cho entity tables/indexes, row-level incremental writes, SQL pagination/aggregates, keyset + `totals=false`, streaming CSV, migration giữ dữ liệu và benchmark. Không còn ghi JSONB toàn workspace lên PostgreSQL.
+
 ## Nguồn và phạm vi
 
 Chỉ dùng `README.md`, `BEHAVIOR.md`, `UI.md`, `ACCEPTANCE.md` trong workspace này làm đặc tả. Bốn file gốc giữ nguyên. Không truy cập workspace `/home/longht/blitzit`, AppImage, mã trích xuất, hay tài liệu phân tích. Không dùng REA để khảo sát artifact. Không gọi API Blitzit và không triển khai license/auth/billing.

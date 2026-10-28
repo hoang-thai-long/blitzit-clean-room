@@ -59,6 +59,14 @@ it('SQL report and list page return aggregates/pages, not 100k rows in Node',asy
   expect(response.statusCode).toBe(200);expect(response.json().data.totals.sessions).toBe(100000);expect(response.body.length).toBeLessThan(10_000);
   measurements.reads={sessionPageMs:pageMs,sessionResponseBytes:page.body.length,reportMs,reportResponseBytes:response.body.length};
 });
+it('totals=false avoids exact aggregate work for keyset scrolling',async()=>{
+  const first=await app.inject(`${base}/sessions?limit=50&totals=false`);
+  expect(first.json().data.total).toBeNull();expect(first.json().data.totalDurationMs).toBeNull();
+  const start=performance.now();const next=await app.inject(`${base}/sessions?limit=50&totals=false&cursor=${first.json().data.nextCursor}`);
+  measurements.keysetWithoutTotalsMs=performance.now()-start;
+  expect(next.statusCode).toBe(200);expect(next.json().data.items).toHaveLength(50);
+  expect(next.json().data.items.some((x:{id:string})=>first.json().data.items.some((y:{id:string})=>x.id===y.id))).toBe(false);
+});
 it('CSV cursor cleanup also runs when export is aborted before the first chunk',async()=>{
   const q=new Queries(database,'UTC');const {stream}=await q.csv(id,{});stream.destroy();
   await new Promise(resolve=>stream.once('close',resolve));

@@ -1,6 +1,6 @@
 # Daylight Desktop cho Zorin OS — Dynamic Island + PostgreSQL
 
-> **REST API bổ sung:** [API.md](API.md). API dùng cùng PostgreSQL snapshot table. Desktop đang giữ workspace lock thì API đọc được nhưng ghi trả 423; quit desktop hoặc dùng Workspace ID khác. Desktop vẫn dùng IPC/native PostgreSQL, không phụ thuộc API để chạy.
+> **Daylight 1.1.0 / schema v2:** [DATABASE.md](DATABASE.md). Desktop và [REST API](API.md) dùng chung các bảng chuẩn hóa; không ghi snapshot JSONB toàn workspace. Desktop giữ workspace lock thì API đọc được nhưng ghi trả 423. Desktop vẫn dùng IPC/native PostgreSQL, không phụ thuộc API để chạy. Sau migration cần dùng bản 1.1.0 trở lên.
 
 Phần này được triển khai theo yêu cầu bổ sung của người dùng. **Desktop, Island, cơ chế PostgreSQL/outbox là thiết kế mới**, không phải suy luận hành vi gốc từ phần UNKNOWN của bốn tài liệu clean-room. Không truy cập mã/artifact sản phẩm gốc; không có API Blitzit, product login, license hay billing.
 
@@ -10,8 +10,8 @@ Target: **Linux x86-64 / Zorin OS nền Ubuntu**, ưu tiên Zorin 17/18.
 
 | File | Cách dùng |
 |---|---|
-| `release/Daylight-1.0.0-amd64.deb` | Cài vào menu ứng dụng của Zorin |
-| `release/Daylight-1.0.0-x86_64.AppImage` | Chạy portable, không cài package |
+| `release/Daylight-1.1.0-amd64.deb` | Cài/nâng cấp trong Zorin |
+| `release/Daylight-1.1.0-x86_64.AppImage` | Chạy portable, không cài package |
 | `release/linux-unpacked/daylight` | Bản unpacked để chạy/kiểm thử trực tiếp |
 
 App đóng gói chứa Electron, UI React, IPC bridge và PostgreSQL client. **Không cần mở browser hoặc chạy Vite preview. PostgreSQL là dịch vụ riêng**, không nhúng database server vào executable.
@@ -19,7 +19,7 @@ App đóng gói chứa Electron, UI React, IPC bridge và PostgreSQL client. **K
 Từ thư mục dự án, cài `.deb`:
 
 ```sh
-sudo apt install ./release/Daylight-1.0.0-amd64.deb
+sudo apt install ./release/Daylight-1.1.0-amd64.deb
 daylight
 ```
 
@@ -28,14 +28,14 @@ Hoặc mở **Daylight** từ menu ứng dụng. Tên Debian package là `local-
 Chạy AppImage:
 
 ```sh
-chmod +x release/Daylight-1.0.0-x86_64.AppImage
-./release/Daylight-1.0.0-x86_64.AppImage
+chmod +x release/Daylight-1.1.0-x86_64.AppImage
+./release/Daylight-1.1.0-x86_64.AppImage
 ```
 
 Nếu máy không có FUSE, dùng chế độ tự giải nén của AppImage:
 
 ```sh
-APPIMAGE_EXTRACT_AND_RUN=1 ./release/Daylight-1.0.0-x86_64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./release/Daylight-1.1.0-x86_64.AppImage
 ```
 
 Không cần Node/npm khi chỉ chạy gói cài. `homepage` trong metadata dùng miền dành riêng `example.invalid` vì đây là bản private, chưa có website phát hành.
@@ -105,18 +105,9 @@ Mặc định Linux chạy **X11/XWayland** để hỗ trợ vị trí cửa s�
 
 ### PostgreSQL
 
-App tự tạo bảng:
+App tự migrate sang schema chuẩn hóa v2: `daylight_workspace_meta`, `daylight_lists`, `daylight_tasks`, `daylight_subtasks`, `daylight_sessions`, `daylight_preferences`, `daylight_timers`. DDL và index ở `database/002-normalized.sql`; nguyên tắc migration/backup ở [DATABASE.md](DATABASE.md).
 
-```sql
-CREATE TABLE IF NOT EXISTS daylight_workspaces (
-  id text PRIMARY KEY,
-  revision bigint NOT NULL DEFAULT 0,
-  state jsonb NOT NULL CHECK (jsonb_typeof(state) = 'object'),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-```
-
-`state` chứa lists, tasks/subtasks/notes, sessions, preferences và timer theo schema local version 1. Một snapshot JSONB/Workspace ID được ghi nguyên tử bằng một SQL statement; không giả định đây là schema server của sản phẩm gốc. Reports hiện tính từ state đã tải, dùng công thức local đã ghi ở `IMPLEMENTATION.md`.
+Trong bộ nhớ/UI vẫn dùng state version 1, nhưng PostgreSQL chỉ INSERT/UPDATE/DELETE các rows/columns đã đổi trong transaction. Timer tick không viết lại sessions. Bootstrap/restore dựng state từ các bảng; `daylight_workspaces` là view export tương thích, không còn cột state vật lý. Reports desktop vẫn tính từ state đã tải; reports REST được aggregate trong SQL.
 
 - SQL parameters, không nối chuỗi input thành SQL.
 - PostgreSQL advisory lock giữ một writer cho mỗi Workspace ID.
@@ -173,7 +164,7 @@ Kiểm thử trực tiếp AppImage đã build:
 
 ```sh
 APPIMAGE_EXTRACT_AND_RUN=1 \
-DAYLIGHT_TEST_EXECUTABLE="$PWD/release/Daylight-1.0.0-x86_64.AppImage" \
+DAYLIGHT_TEST_EXECUTABLE="$PWD/release/Daylight-1.1.0-x86_64.AppImage" \
 xvfb-run -a -s "-screen 0 1600x1100x24" npm run test:desktop
 ```
 

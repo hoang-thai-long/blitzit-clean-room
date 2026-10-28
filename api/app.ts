@@ -10,13 +10,12 @@ import { Database, type Workspace } from './database';
 import { ApiError, invalid, notFound } from './errors';
 import * as schema from './schemas';
 import * as domain from './domain';
-import { report, sessionsMatching, type Filters } from './reports';
+import type { Filters } from './reports';
 
 type Params = { workspace: string; listId: string; taskId: string; subtaskId: string; sessionId: string };
-type PageQuery = { limit?: string; offset?: string; cursor?:string };
+type PageQuery = { limit?: string; offset?: string; cursor?:string; totals?:string };
 const root = '/api/v1/workspaces';
 const path = `${root}/:workspace`;
-const paging = <T>(items: T[], query: PageQuery) => { const limit = Number(query.limit ?? 50), offset = Number(query.offset ?? 0); return { items: items.slice(offset, offset + limit), total: items.length, limit, offset, nextOffset: offset + limit < items.length ? offset + limit : null }; };
 type Meta=Pick<Workspace,'id'|'revision'|'updatedAt'> & {state?:State};
 function etag(reply: FastifyReply, workspace: Meta) { reply.header('ETag', `"${workspace.revision}"`).header('Cache-Control', 'no-store'); }
 function envelope(reply: FastifyReply, workspace: Meta, data: unknown = workspace.state) { etag(reply, workspace); return { workspaceId: workspace.id, revision: workspace.revision, updatedAt: workspace.updatedAt, data }; }
@@ -117,7 +116,7 @@ export async function createApi(config: ApiConfig, database = new Database(confi
   app.get(`${path}/preferences`, { schema: scoped('Preferences', 'Read preferences') }, async (request, reply) => { const w = await read(request); return envelope(reply, w, w.state.prefs); });
   app.patch<{ Body: Partial<Preferences> }>(`${path}/preferences`, { schema: scoped('Preferences', 'Patch preferences; preserve unspecified fields', undefined, { headers: schema.headers, body: patchBody({ mode: { type: 'string', enum: ['dark', 'light', 'system'] }, brand: { type: 'string', enum: Object.keys(BRANDS) }, pomodoro: schema.bool, work: { type: 'integer', minimum: 1, maximum: 120 }, short: { type: 'integer', minimum: 1, maximum: 60 }, long: { type: 'integer', minimum: 1, maximum: 60 }, cycle: { type: 'integer', minimum: 1, maximum: 12 }, sound: schema.bool, showTime: schema.bool, fullTitle: schema.bool }) }) }, async (request, reply) => mutate(request, reply, s => ({ state: s, data: domain.patchPreferences(s, request.body) })));
 
-  app.get<{ Querystring: Filters & PageQuery }>(`${path}/sessions`, { schema: scoped('Sessions', 'SQL pagination; optional keyset cursor avoids deep OFFSET; totals cover full filter', undefined, { querystring: schema.object({ ...schema.paging, ...schema.sessionFilters, cursor:{type:'string',maxLength:1024} }) }) }, async (request, reply) => {
+  app.get<{ Querystring: Filters & PageQuery }>(`${path}/sessions`, { schema: scoped('Sessions', 'SQL pagination; cursor + totals=false avoids deep OFFSET and full-filter aggregates', undefined, { querystring: schema.object({ ...schema.paging, ...schema.sessionFilters, cursor:{type:'string',maxLength:1024},totals:{type:'string',enum:['true','false'],default:'true'} }) }) }, async (request, reply) => {
     const result=await queries.sessions((request.params as Params).workspace,request.query);return envelope(reply,result.workspace,result.data);
   });
   app.get<{ Querystring: Filters }>(`${path}/sessions/export.csv`, { schema: scoped('Sessions', 'Stream all filtered CSV rows from one PostgreSQL snapshot in 500-row batches', undefined, { querystring: schema.object(schema.sessionFilters) }) }, async (request, reply) => { const {workspace,stream}=await queries.csv((request.params as Params).workspace,request.query);etag(reply,workspace);return reply.type('text/csv; charset=utf-8').header('Content-Disposition',`attachment; filename="daylight-${workspace.id}-sessions.csv"`).send(stream); });

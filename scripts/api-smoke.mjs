@@ -14,4 +14,7 @@ else if (!existing.ok) throw new Error(`Cannot read api-demo: HTTP ${existing.st
 const tasks = await (await request(`${workspace}/tasks?limit=5`)).json();
 const report = await (await request(`${workspace}/reports/overview?days=7`)).json();
 assert.equal(report.data.formula, 'daylight-local-v1');
+const lightweightPage = await (await request(`${workspace}/sessions?limit=5&totals=false`)).json();
+assert.equal(lightweightPage.data.total, null);
+assert.equal(lightweightPage.data.totalDurationMs, null);
 console.log(JSON.stringify({ status: 'PASS', api: base, docs: `${base}/docs/`, workspace: 'api-demo', taskCount: tasks.data.total, openApiPaths: Object.keys(spec.paths).length }, null, 2));

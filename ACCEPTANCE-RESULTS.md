@@ -4,6 +4,8 @@
 
 > **Delta REST API:** [API.md](API.md) ghi contract mới, PostgreSQL config và kết quả **25 API tests PASS**, HTTP smoke/SQL readback/Swagger Chromium PASS. REST API độc lập dùng chung workspace table và writer lock với desktop; không diễn giải kết quả này thành xác nhận backend gốc.
 
+> **Delta schema v2:** [DATABASE.md](DATABASE.md) ghi migration giữ nguyên dữ liệu thực, 34 API/migration/performance tests PASS trên schema chuẩn hóa và 3 desktop E2E PASS trên AppImage 1.1.0. Có EXPLAIN ANALYZE và fixture 10k tasks/100k sessions; không coi số đo fixture là SLA hay thay các tiêu chí UNKNOWN bằng pass giả định.
+
 Nguồn tiêu chí: `ACCEPTANCE.md`. Báo cáo này là kết quả **triển khai mới**, không nâng mức tin cậy khảo sát tĩnh và không chứng nhận runtime của sản phẩm gốc.
 
 ## Kết quả thực chạy

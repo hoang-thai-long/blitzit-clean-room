@@ -1,5 +1,7 @@
 # Daylight REST API và cấu hình PostgreSQL
 
+> **Schema v2 / Daylight 1.1.0:** dữ liệu đã chuẩn hóa thành các bảng entity, query pagination/reports chạy tại PostgreSQL. Chi tiết bảng/index/migration và số đo: [DATABASE.md](DATABASE.md). `daylight_workspaces` chỉ còn là view tương thích đọc snapshot, không còn là nơi ghi JSONB toàn workspace.
+
 Đây là **API mới do bản clean-room định nghĩa**, không phải endpoint/schema của Blitzit. Không có product login, license hoặc billing. Backend phục vụ dữ liệu local của Daylight bằng Fastify + TypeScript + PostgreSQL.
 
 ## Địa chỉ đang chạy
@@ -122,7 +124,7 @@ Lỗi:
 | 404 | Không có route/workspace/entity |
 | 409 | Workspace ID đã tồn tại hoặc revision conflict |
 | 412 | If-Match cũ |
-| 413 | Request >1 MiB hoặc snapshot workspace >20 MiB |
+| 413 | Request >1 MiB hoặc state của mutation scope >20 MiB; không phải giới hạn tổng dung lượng database |
 | 422 | Business rule không hợp lệ, ví dụ title rỗng hoặc end≤start |
 | 423 | Desktop/another writer giữ lock; có `Retry-After: 1` |
 | 503 | PostgreSQL không khả dụng; chưa xác nhận save |
@@ -203,7 +205,7 @@ Fields: `mode` (dark/light/system), `brand` (năm brand của UI), `pomodoro`, `
 
 | Method | Path | Body/query |
 |---|---|---|
-| GET | `/sessions` | `start`, `end` (date-only, inclusive), `listId`, `kind`, `limit`, `offset` |
+| GET | `/sessions` | `start`, `end`, `listId`, `kind`, `limit`, `offset` hoặc `cursor`, `totals=true/false` |
 | POST | `/sessions` | `{ taskId, start, end, kind? }`, timestamps **Unix milliseconds** |
 | GET | `/sessions/:sessionId` | Session history |
 | PATCH | `/sessions/:sessionId` | `{ start?, end? }`; start-only dời end để giữ duration |
@@ -227,7 +229,7 @@ Page shape:
 }
 ```
 
-`totalDurationMs` có trên sessions page, tính toàn bộ filter, không chỉ trang hiện tại. Limit 1–100, offset ≥0; sessions sắp start giảm dần, ID làm tie-breaker. CSV có UTF-8 BOM, quote/newline escaping, tiền tố công thức được escape bằng dấu nháy đơn và giữ phút thập phân.
+`totalDurationMs` có trên sessions page, tính toàn bộ filter, không chỉ trang hiện tại. Limit 1–100, offset ≥0; sessions sắp `(start DESC, id DESC)`. Response có thêm `nextCursor`; dùng cursor để tránh deep OFFSET. Cursor gắn với filter, không kết hợp offset khác 0. `totals=false` bỏ COUNT/SUM và trả hai tổng là null; nên dùng khi cuộn các trang tiếp theo. CSV stream 500 rows/lượt từ một PostgreSQL snapshot, có UTF-8 BOM, quote/newline escaping, tiền tố công thức escape bằng nháy đơn và phút thập phân.
 
 Reports trả `formula: "daylight-local-v1"`, `range`, `totals`, `weekdays`, `startsByHour`, `timeByList`, `unknowns`. Công thức giống thiết kế local đã ghi: chọn session theo ngày start; focus là tổng work duration, breaks riêng; active days đếm ngày có work; completed theo completedAt; average = focus/completed và `null` khi không có completed. Weekday average tính cả ngày zero; hourly chart đếm số work session bắt đầu. Custom range tối đa 366 ngày. Công thức aggregate gốc/accuracy/heatmap vẫn UNKNOWN.
 
@@ -272,7 +274,7 @@ if (saved.status === 412) { /* Đọc state mới trước khi thử lại edit.
 
 ## Quan hệ với desktop và web
 
-- API dùng đúng bảng `daylight_workspaces` của desktop; không tạo một database giả độc lập.
+- API và desktop 1.1.0 dùng chung `daylight_workspace_meta`, lists/tasks/subtasks/sessions/preferences/timers theo [schema v2](DATABASE.md). Không tạo một database giả độc lập.
 - PostgreSQL advisory lock cùng key `daylight:<workspace>`: desktop giữ session lock suốt lúc kết nối; API dùng transaction lock. Desktop đang mở workspace → GET API được phép, write API trả **423**. Quit desktop hoặc chọn Workspace ID khác để ghi qua API.
 - Nhiều API request cùng workspace được serialize trong transaction; SELECT FOR UPDATE + revision check; rollback khi operation lỗi. Desktop offline có local edits rồi API thay DB → desktop reconnect báo conflict thay vì overwrite.
 - Electron hiện vẫn dùng PostgreSQL client trong main process qua IPC; browser UI hiện vẫn là localStorage. Đợt này bổ sung REST backend, Swagger và cấu hình chạy, **chưa đổi transport UI thành HTTP**.
@@ -285,9 +287,9 @@ if (saved.status === 412) { /* Đọc state mới trước khi thử lại edit.
 - `api/app.ts`: REST routes, schemas/OpenAPI, error handling.
 - `api/domain.ts`: quy tắc task/list/subtask/preferences/session.
 - `api/reports.ts`: filter và công thức local với timezone tường minh.
-- `database/001-workspaces.sql`: migration idempotent, không drop/reset data.
+- `database/001-workspaces.sql`, `002-normalized.sql`: nâng từ snapshot v1 lên normalized v2, giữ backup và kiểm round-trip; không reset data.
 - `Dockerfile.api`, `compose.yaml`: image non-root + API/PostgreSQL health checks.
-- `api/*.test.ts`: **25 tests PASS** với PostgreSQL thật, bao gồm concurrent writes, 423 khi desktop giữ lock, stale If-Match, rollback, CRUD, CSV 121 sessions, reports và CORS.
+- `api/*.test.ts`: **34 tests PASS**, thêm migration rollback/FK và fixture 10k tasks/100k sessions ngoài các kiểm thử API cũ.
 
 ```sh
 npm run test:api
